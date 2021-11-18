@@ -5,15 +5,24 @@
 #include <DallasTemperature.h>
 #include <Encoder.h>
 #include <button.h>
-
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GrayOLED.h>
 
 #define USE_SETTINGS true
-// Pis settings
+
+// Pis defines
 #define ONE_WIRE_BUS 4
 #define LED 2
 #define ENC_PIN_1 5
 #define ENC_PIN_2 6
 #define ENC_BUTTON 7
+#define OLED_RESET 16
+
+// Display defines
+#define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 
 
 #if USE_SETTINGS
@@ -28,6 +37,8 @@
 #define CHAT_ID "Chat_ID"
 #endif
 
+// Display SSD1306
+Adafruit_SSD1306 display(OLED_RESET);
 
 // Encoder
 Encoder encoder(ENC_PIN_1, ENC_PIN_2);
@@ -51,6 +62,7 @@ void telegram_setup();
 void pins_setup();
 void time_setup();
 void sensor_setup();
+void displaySetup();
 
 void handleNewMessages(int numNewMessages);
 
@@ -62,6 +74,10 @@ void setup() {
 	time_setup();
 	pins_setup();
 	sensor_setup();
+	displaySetup();
+	display.setCursor(0, 0);
+	display.println("Test message");
+	display.display();
 }
 
 void loop() {
@@ -143,6 +159,13 @@ void time_setup(){
 void sensor_setup(){
 	sensors.begin();
 	sensors.setResolution(12);
+}
+
+void displaySetup(){
+	display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+	display.clearDisplay();
+	display.setTextSize(1);
+	display.display();
 }
 
 void handleNewMessages(int numNewMessages) {
