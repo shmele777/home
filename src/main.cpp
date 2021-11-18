@@ -3,8 +3,18 @@
 #include <UniversalTelegramBot.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Encoder.h>
+#include <button.h>
+
 
 #define USE_SETTINGS true
+// Pis settings
+#define ONE_WIRE_BUS 4
+#define LED 2
+#define ENC_PIN_1 5
+#define ENC_PIN_2 6
+#define ENC_BUTTON 7
+
 
 #if USE_SETTINGS
 #include <settings.h>
@@ -16,33 +26,33 @@
 // Telegram settings
 #define BOT_TOKEN "Bot_token"
 #define CHAT_ID "Chat_ID"
-
-// Pis settings
-#define ONE_WIRE_BUS 4
-#define LED 2
 #endif
 
+
+// Encoder
+Encoder encoder(ENC_PIN_1, ENC_PIN_2);
+Button button(ENC_BUTTON);
+int16_t oldPosition = -999;
+
+// Sensor
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire, 1);
 
-const unsigned long BOT_MTBS = 1000; // mean time between scan messages
-
+// Telegram
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 WiFiClientSecure secured_client;
 UniversalTelegramBot bot(BOT_TOKEN, secured_client);
-unsigned long bot_lasttime; // last time messages' scan has been done
+uint64_t bot_lasttime; // last time messages' scan has been done
+const uint64_t BOT_MTBS = 1000; // mean time between scan messages
 
-void handleNewMessages(int numNewMessages) {
-	for (int i = 0; i < numNewMessages; i++) {
-		bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, "");
-	}
-}
 
 void wifi_setup();
 void telegram_setup();
 void pins_setup();
 void time_setup();
 void sensor_setup();
+
+void handleNewMessages(int numNewMessages);
 
 
 void setup() {
@@ -55,6 +65,15 @@ void setup() {
 }
 
 void loop() {
+	int16_t newPosition = encoder.read();
+	if (newPosition != oldPosition){
+		oldPosition = newPosition;
+		Serial.print("Position encoder: ");
+		Serial.println(newPosition);
+	}
+
+	if (button.click() == true) encoder.write(0);
+
 	if (millis() - bot_lasttime > BOT_MTBS){
 		int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
@@ -105,6 +124,8 @@ void telegram_setup(){
 void pins_setup(){
 	pinMode(LED, OUTPUT);
 	digitalWrite(LED, 1);
+	// pinMode(ENC_BUTTON, INPUT_PULLUP);
+   	// attachInterrupt(ENC_BUTTON, handleKey, RISING);
 }
 
 void time_setup(){
@@ -122,4 +143,10 @@ void time_setup(){
 void sensor_setup(){
 	sensors.begin();
 	sensors.setResolution(12);
+}
+
+void handleNewMessages(int numNewMessages) {
+	for (int i = 0; i < numNewMessages; i++) {
+		bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, "");
+	}
 }
