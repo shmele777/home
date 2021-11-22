@@ -8,7 +8,7 @@ class Button {
         }
         bool click() {
         bool btnState = digitalRead(_pin);
-        if (!btnState && !_flag && millis() - _tmr >= 100) {
+        if (!btnState && !_flag && millis() - _tmr >= 50) {
             _flag = true;
             _tmr = millis();
             return true;

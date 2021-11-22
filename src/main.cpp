@@ -3,26 +3,23 @@
 #include <UniversalTelegramBot.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <Encoder.h>
+// #include <Encoder.h>
 #include <button.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <Adafruit_GrayOLED.h>
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_I2CDevice.h>
 
 #define USE_SETTINGS true
 
 // Pis defines
 #define ONE_WIRE_BUS 4
 #define LED 2
-#define ENC_PIN_1 5
-#define ENC_PIN_2 6
-#define ENC_BUTTON 7
-#define OLED_RESET 16
+#define BUTTON_0 12
+#define BUTTON_1 13
 
 // Display defines
-#define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 
 
 #if USE_SETTINGS
@@ -38,12 +35,20 @@
 #endif
 
 // Display SSD1306
-Adafruit_SSD1306 display(OLED_RESET);
+#define COLUMS 20
+#define ROWS   4
+#define LCD_SPACE_SYMBOL 0x20  //space symbol from the LCD ROM, see p.9 of GDM2004D datasheet
+
+LiquidCrystal_I2C lcd(PCF8574A_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
 
 // Encoder
-Encoder encoder(ENC_PIN_1, ENC_PIN_2);
-Button button(ENC_BUTTON);
-int16_t oldPosition = -999;
+// Encoder encoder(ENC_PIN_1, ENC_PIN_2);
+// Button button(ENC_BUTTON);
+// int16_t oldPosition = -999;
+
+// Button
+uint16_t count = 0;
+boolean click = false;
 
 // Sensor
 OneWire oneWire(ONE_WIRE_BUS);
@@ -65,7 +70,8 @@ void sensor_setup();
 void displaySetup();
 
 void handleNewMessages(int numNewMessages);
-
+void ICACHE_RAM_ATTR handleKey();
+void ICACHE_RAM_ATTR handleKey_1();
 
 void setup() {
 	Serial.begin(115200);
@@ -75,32 +81,52 @@ void setup() {
 	pins_setup();
 	sensor_setup();
 	displaySetup();
-	display.setCursor(0, 0);
-	display.println("Test message");
-	display.display();
+
+	lcd.setCursor(0, 3);
+	lcd.print(count);
+	lcd.setCursor(0, 0);
+	lcd.print(WiFi.localIP().toString() + " " + String(WIFI_SSID));
+	lcd.setCursor(10, 2);
+	lcd.print(WiFi.RSSI());
 }
 
 void loop() {
-	int16_t newPosition = encoder.read();
-	if (newPosition != oldPosition){
-		oldPosition = newPosition;
-		Serial.print("Position encoder: ");
-		Serial.println(newPosition);
-	}
+	// int16_t newPosition = encoder.read();
+	// if (newPosition != oldPosition){
+	// 	oldPosition = newPosition;
+	// 	Serial.print("Position encoder: ");
+	// 	Serial.println(newPosition);
+	// }
 
-	if (button.click() == true) encoder.write(0);
+	// if (button.click() == true) {
+	// 	// encoder.write(0);
+	// 	oldPosition ++;
+	// 	Serial.println("button: ");
+	// 	Serial.println(oldPosition);
+
+	// }
 
 	if (millis() - bot_lasttime > BOT_MTBS){
 		int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
 		while (numNewMessages) {
 			Serial.println(String(bot.messages->from_name)+"("+String(bot.messages->from_id)+"):\t"+String(bot.messages->text));
+			
+			lcd.setCursor(0, 1);
+			lcd.print("                   ");
+			lcd.setCursor(0, 1);
+			lcd.print(String(bot.messages->text));
+			lcd.setCursor(10, 2);
+			lcd.print(WiFi.RSSI());
 			numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 			if (bot.messages->text == "/temp_home"){
 				sensors.requestTemperatures();
 				float tempC = sensors.getTempCByIndex(0);
-				if(tempC != DEVICE_DISCONNECTED_C) 
+				if(tempC != DEVICE_DISCONNECTED_C) {
 					bot.sendMessage(CHAT_ID, String(tempC)+" C");
+					lcd.setCursor(0, 2);
+					lcd.print(String(tempC)+" C");
+				}
 				else 
 					bot.sendMessage(CHAT_ID, "Error");
 			}
@@ -112,12 +138,16 @@ void loop() {
 				digitalWrite(LED, 1);
 				bot.sendMessage(CHAT_ID, "State LED OFF");
 			}
-				if (bot.messages->text == "/led_state"){
+			if (bot.messages->text == "/led_state"){
 				bot.sendMessage(CHAT_ID, "State LED " + String(!digitalRead(LED)));
 			}
 		}
-	bot_lasttime = millis();
+		bot_lasttime = millis();
 	}
+	// if (click == true) {
+	// 	lcd.setCursor(0, 2);
+	// 	lcd.print(count);
+	// }
 }
 
 
@@ -140,8 +170,10 @@ void telegram_setup(){
 void pins_setup(){
 	pinMode(LED, OUTPUT);
 	digitalWrite(LED, 1);
-	// pinMode(ENC_BUTTON, INPUT_PULLUP);
-   	// attachInterrupt(ENC_BUTTON, handleKey, RISING);
+	pinMode(BUTTON_0, INPUT_PULLUP);
+   	attachInterrupt(digitalPinToInterrupt(BUTTON_0), handleKey, RISING);
+	pinMode(BUTTON_1, INPUT_PULLUP);
+   	attachInterrupt(digitalPinToInterrupt(BUTTON_1), handleKey_1, RISING);
 }
 
 void time_setup(){
@@ -162,14 +194,30 @@ void sensor_setup(){
 }
 
 void displaySetup(){
-	display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
-	display.clearDisplay();
-	display.setTextSize(1);
-	display.display();
+	lcd.begin(COLUMS, ROWS, LCD_5x8DOTS, 4, 5);
+	lcd.print(F("Display OK..."));
 }
 
 void handleNewMessages(int numNewMessages) {
 	for (int i = 0; i < numNewMessages; i++) {
 		bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, "");
 	}
+}
+
+void ICACHE_RAM_ATTR handleKey(){
+	detachInterrupt(BUTTON_0); 
+	// click = true;
+	count ++;
+	lcd.setCursor(0, 3);
+	lcd.print(count);
+	attachInterrupt(digitalPinToInterrupt(BUTTON_0), handleKey, RISING);
+}
+
+void ICACHE_RAM_ATTR handleKey_1(){
+	detachInterrupt(BUTTON_1); 
+	// click = true;
+	count --;
+	lcd.setCursor(0, 3);
+	lcd.print(count);
+	attachInterrupt(digitalPinToInterrupt(BUTTON_1), handleKey_1, RISING);
 }
