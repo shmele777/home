@@ -255,3 +255,12 @@ void IRAM_ATTR handleKey_1(){
 	lcd.print(count);
 	attachInterrupt(BUTTON_1, handleKey_1, RISING);
 }
+
+void IRAM_ATTR_22 handleKey_1(){
+	detachInterrupt(BUTTON_1); 
+	// click = true;
+	count --;
+	lcd.setCursor(0, 3);
+	lcd.print(count);
+	attachInterrupt(BUTTON_1, handleKey_1, RISING);
+}
